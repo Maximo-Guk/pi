@@ -7,6 +7,7 @@ import type {
 } from "@earendil-works/pi-agent-core";
 import { SessionError } from "@earendil-works/pi-agent-core";
 import { applyMigrations } from "./migrations.ts";
+import { sql } from "./sql.ts";
 import { decodeSessionMetadata, type SessionRow } from "./storage/sessions.ts";
 import type {
 	SqliteDatabase,
@@ -40,9 +41,9 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
 }
 
 function configureSqliteDatabase(db: SqliteDatabase): void {
-	db.exec("PRAGMA journal_mode=WAL");
-	db.exec("PRAGMA synchronous=FULL");
-	db.exec("PRAGMA busy_timeout=5000");
+	sql`PRAGMA journal_mode=WAL`.exec(db);
+	sql`PRAGMA synchronous=FULL`.exec(db);
+	sql`PRAGMA busy_timeout=5000`.exec(db);
 }
 
 export interface SqliteSessionSearchOptions {
@@ -52,14 +53,14 @@ export interface SqliteSessionSearchOptions {
 }
 
 function ensureSearchSchema(db: SqliteDatabase): void {
-	db.exec(`
+	sql`
 CREATE VIRTUAL TABLE IF NOT EXISTS session_search_fts USING fts5(
   payload,
   content = 'entries',
   content_rowid = 'rowid',
   tokenize = 'trigram remove_diacritics 1'
 );
-`);
+`.exec(db);
 }
 
 export type SqliteSessionSearchFeedItem =
@@ -70,19 +71,17 @@ export type SqliteSessionSearchFeedItem =
 	| { type: "delete_entry"; sessionId: string; entryId: string };
 
 function rebuildSearchIndex(db: SqliteDatabase): void {
-	db.prepare("INSERT INTO session_search_fts(session_search_fts) VALUES('rebuild')").run();
+	sql`INSERT INTO session_search_fts(session_search_fts) VALUES('rebuild')`.run(db);
 }
 
 function indexSessionInSearchIndex(db: SqliteDatabase, sessionId: string): void {
-	db.prepare(
-		"INSERT INTO session_search_fts(rowid, payload) SELECT rowid, payload FROM entries WHERE session_id = ?",
-	).run(sessionId);
+	sql`INSERT INTO session_search_fts(rowid, payload)
+		SELECT rowid, payload FROM entries WHERE session_id = ${sessionId}`.run(db);
 }
 
 function indexEntryInSearchIndex(db: SqliteDatabase, sessionId: string, entryId: string): void {
-	db.prepare(
-		"INSERT INTO session_search_fts(rowid, payload) SELECT rowid, payload FROM entries WHERE session_id = ? AND id = ?",
-	).run(sessionId, entryId);
+	sql`INSERT INTO session_search_fts(rowid, payload)
+		SELECT rowid, payload FROM entries WHERE session_id = ${sessionId} AND id = ${entryId}`.run(db);
 }
 
 export interface SqliteSessionSearchHit extends SessionSearchHit {
