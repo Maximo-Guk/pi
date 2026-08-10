@@ -3,6 +3,7 @@ import type { SessionSearch } from "./index.ts";
 import {
 	createScanningSessionSearch,
 	type ScanningSession,
+	type ScanningSessionSearchHit,
 	type ScanningSessionSource,
 	type SessionSearchCandidate,
 } from "./scanning.ts";
@@ -34,20 +35,28 @@ function defaultMemorySearchText<TMetadata extends SessionMetadata>(
 async function* memorySearchCandidates<TMetadata extends SessionMetadata>(
 	readable: MemoryScanningReadable<TMetadata>,
 	options: MemoryScanningSessionSourceOptions<TMetadata>,
-	query: { afterSeq?: number; limit?: number } = {},
+	query: { afterSeq?: number; limit?: number; entryTypes?: readonly Entry["type"][] } = {},
 ): AsyncIterable<SessionSearchCandidate> {
 	const metadata = await readable.getMetadata();
 	const projectText = options.projectText ?? defaultMemorySearchText;
 	const pageSize = query.limit ?? options.pageSize ?? 100;
 	let afterSeq = query.afterSeq ?? 0;
+	const entryTypes = query.entryTypes === undefined ? undefined : new Set(query.entryTypes);
 	while (true) {
-		const entries = await readable.findEntries({ order: "oldestFirst", limit: pageSize, cursor: { afterSeq } });
+		const entries = await readable.findEntries({
+			order: "oldestFirst",
+			limit: pageSize,
+			cursor: { afterSeq },
+			type: query.entryTypes?.length === 1 ? query.entryTypes[0] : undefined,
+		});
 		if (entries.length === 0) break;
 		for (const entry of entries) {
+			if (entryTypes !== undefined && !entryTypes.has(entry.type)) continue;
 			const label = await readable.getLabel(entry.id);
 			yield {
 				entryId: entry.id,
 				seq: entry.seq,
+				type: entry.type,
 				timestamp: entry.timestamp,
 				text: projectText(metadata, entry, label),
 				fields: label === undefined ? undefined : { label },
@@ -82,6 +91,6 @@ export function createMemoryScanningSessionSource<TMetadata extends SessionMetad
 export function createMemoryScanningSessionSearch<TMetadata extends SessionMetadata>(
 	readables: readonly MemoryScanningReadable<TMetadata>[],
 	options?: MemoryScanningSessionSourceOptions<TMetadata>,
-): SessionSearch<TMetadata> {
+): SessionSearch<ScanningSessionSearchHit> {
 	return createScanningSessionSearch(createMemoryScanningSessionSource(readables, options));
 }

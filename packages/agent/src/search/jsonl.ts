@@ -10,15 +10,22 @@ import type { SessionSearch } from "./index.ts";
 import {
 	createScanningSessionSearch,
 	type ScanningSession,
+	type ScanningSessionSearchHit,
 	type ScanningSessionSource,
 	type SessionSearchCandidate,
 } from "./scanning.ts";
+
+type JsonlScanningReadable = Pick<JsonlSessionStorage, "getMetadata" | "findEntries" | "getLabel">;
 
 export type JsonlSearchTextProjector = (
 	metadata: JsonlSessionMetadata,
 	entry: Entry,
 	label: string | undefined,
 ) => string;
+
+export interface JsonlSessionSearchHit extends ScanningSessionSearchHit {
+	readonly metadata: JsonlSessionMetadata;
+}
 
 export interface JsonlScanningSessionSourceOptions {
 	projectText?: JsonlSearchTextProjector;
@@ -39,22 +46,30 @@ export async function* jsonlSearchSessions(
 }
 
 async function* jsonlSearchCandidates(
-	storage: JsonlSessionStorage,
+	storage: JsonlScanningReadable,
 	options: JsonlScanningSessionSourceOptions,
-	query: { afterSeq?: number; limit?: number } = {},
+	query: { afterSeq?: number; limit?: number; entryTypes?: readonly Entry["type"][] } = {},
 ): AsyncIterable<SessionSearchCandidate> {
 	const metadata = await storage.getMetadata();
 	const projectText = options.projectText ?? defaultJsonlSearchText;
 	const pageSize = query.limit ?? options.pageSize ?? 100;
 	let afterSeq = query.afterSeq ?? 0;
+	const entryTypes = query.entryTypes === undefined ? undefined : new Set(query.entryTypes);
 	while (true) {
-		const entries = await storage.findEntries({ order: "oldestFirst", limit: pageSize, cursor: { afterSeq } });
+		const entries = await storage.findEntries({
+			order: "oldestFirst",
+			limit: pageSize,
+			cursor: { afterSeq },
+			type: query.entryTypes?.length === 1 ? query.entryTypes[0] : undefined,
+		});
 		if (entries.length === 0) break;
 		for (const entry of entries) {
+			if (entryTypes !== undefined && !entryTypes.has(entry.type)) continue;
 			const label = await storage.getLabel(entry.id);
 			yield {
 				entryId: entry.id,
 				seq: entry.seq,
+				type: entry.type,
 				timestamp: entry.timestamp,
 				text: projectText(metadata, entry, label),
 				fields: label === undefined ? undefined : { label },
@@ -90,8 +105,17 @@ export function createJsonlScanningSessionSource(
 export function createJsonlScanningSessionSearch(
 	options: JsonlSessionRepoOptions,
 	sourceOptions?: JsonlScanningSessionSourceOptions,
-): SessionSearch<JsonlSessionMetadata> {
-	return createScanningSessionSearch(createJsonlScanningSessionSource(options, sourceOptions), {
-		sourceOptions: (query) => ({ cwd: query.cwd }),
-	});
+): SessionSearch<JsonlSessionSearchHit> {
+	return createScanningSessionSearch<JsonlSessionMetadata, JsonlSessionListOptions, JsonlSessionSearchHit>(
+		createJsonlScanningSessionSource(options, sourceOptions),
+		{
+			createHit: (metadata, candidate) => ({
+				sessionId: metadata.id,
+				entryId: candidate.entryId,
+				timestamp: candidate.timestamp,
+				snippet: candidate.text,
+				metadata,
+			}),
+		},
+	);
 }

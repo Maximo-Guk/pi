@@ -1,9 +1,10 @@
-import type { SessionMetadata } from "../harness/session/types.ts";
+import type { Entry } from "../harness/session/types.ts";
 
 export type { IndexedSessionSearch, SearchIndexWriter } from "./indexable.ts";
 export {
 	createJsonlScanningSessionSearch,
 	createJsonlScanningSessionSource,
+	type JsonlSessionSearchHit,
 	jsonlScanningSessions,
 	jsonlSearchSessions,
 } from "./jsonl.ts";
@@ -14,6 +15,7 @@ export {
 } from "./memory.ts";
 export type {
 	ScanningSession,
+	ScanningSessionSearchHit,
 	ScanningSessionSearchOptions,
 	ScanningSessionSource,
 	SessionSearchCandidate,
@@ -21,19 +23,21 @@ export type {
 export { createScanningSessionSearch } from "./scanning.ts";
 
 export interface SessionSearchOptions {
-	text: string;
-	cwd?: string;
-	limit?: number;
+	/** Restrict results to specific canonical entry types. */
+	readonly entryTypes?: readonly Entry["type"][];
+	/** Maximum number of hits to return. */
+	readonly limit?: number;
+	/** Abort signal for cancellation, e.g. search-as-you-type. */
+	readonly signal?: AbortSignal;
 }
 
-export interface SessionSearchHit<TMetadata extends SessionMetadata = SessionMetadata> {
-	metadata: TMetadata;
-	entryId: string;
-	timestamp: number;
-	snippet?: string;
-	score?: number;
+export interface SessionSearchHit {
+	/** Logical identifier of the session that owns the entry. */
+	readonly sessionId: string;
+	/** Logical identifier of the entry within that session. */
+	readonly entryId: string;
 }
 
-export interface SessionSearch<TMetadata extends SessionMetadata = SessionMetadata> {
-	search(options: SessionSearchOptions): Promise<SessionSearchHit<TMetadata>[]>;
+export interface SessionSearch<T extends SessionSearchHit = SessionSearchHit> {
+	search(text: string, options?: SessionSearchOptions): AsyncIterable<T>;
 }

@@ -14,9 +14,9 @@ import {
 	createJsonlScanningSessionSearch,
 	createMemoryScanningSessionSource,
 	createScanningSessionSearch,
+	type ScanningSessionSearchHit,
 	type ScanningSessionSource,
 	type SearchIndexWriter,
-	type SessionSearchHit,
 } from "../../../src/search/index.ts";
 import type { AgentMessage } from "../../../src/types.ts";
 
@@ -64,6 +64,12 @@ function createMemorySession(metadata: WorkspaceMetadata): Session<WorkspaceMeta
 
 function createSource(sessions: Session<WorkspaceMetadata>[]): ScanningSessionSource<WorkspaceMetadata> {
 	return createMemoryScanningSessionSource(sessions);
+}
+
+async function collect<T>(iterable: AsyncIterable<T>): Promise<T[]> {
+	const items: T[] = [];
+	for await (const item of iterable) items.push(item);
+	return items;
 }
 
 async function feedDocumentSnapshot<TMetadata extends SessionMetadata, TListOptions>(
@@ -124,24 +130,21 @@ class InMemoryIndexedSearch<TMetadata extends SessionMetadata>
 		}
 	}
 
-	async search(options: { text: string; cwd?: string; limit?: number }): Promise<SessionSearchHit<TMetadata>[]> {
-		const text = options.text.trim().toLowerCase();
-		if (!text) return [];
-		const hits: SessionSearchHit<TMetadata>[] = [];
+	async *search(text: string, options: { limit?: number } = {}): AsyncIterable<ScanningSessionSearchHit> {
+		const query = text.trim().toLowerCase();
+		if (!query) return;
+		let count = 0;
 		for (const document of [...this.documents.values()].sort((left, right) => left.seq - right.seq)) {
-			const cwd = (document.metadata as TMetadata & { cwd?: unknown }).cwd;
-			if (options.cwd !== undefined && cwd !== options.cwd) continue;
-			if (!document.text.toLowerCase().includes(text)) continue;
-			hits.push({
-				metadata: document.metadata,
+			if (!document.text.toLowerCase().includes(query)) continue;
+			yield {
+				sessionId: document.sessionId,
 				entryId: document.entryId,
 				timestamp: document.timestamp,
 				snippet: document.text,
-				score: 0,
-			});
-			if (options.limit !== undefined && hits.length >= options.limit) break;
+			};
+			count += 1;
+			if (options.limit !== undefined && count >= options.limit) break;
 		}
-		return hits;
 	}
 }
 
@@ -168,10 +171,8 @@ describe("session search", () => {
 		const search = createScanningSessionSearch(createSource([root, other]));
 
 		expect("apply" in search).toBe(false);
-		await expect(search.search({ text: "auth", cwd: "/repo" })).resolves.toMatchObject([
-			{ metadata: { id: "root", cwd: "/repo" } },
-		]);
-		await expect(search.search({ text: "missing" })).resolves.toEqual([]);
+		expect(await collect(search.search("auth"))).toMatchObject([{ sessionId: "root" }, { sessionId: "other" }]);
+		expect(await collect(search.search("missing"))).toEqual([]);
 	});
 
 	it("includes labels in memory scanning projections", async () => {
@@ -180,9 +181,24 @@ describe("session search", () => {
 		await session.setLabel(entryId, "important label");
 		const search = createScanningSessionSearch(createSource([session]));
 
-		await expect(search.search({ text: "important" })).resolves.toMatchObject([
-			{ metadata: { id: "session", cwd: "/repo" }, entryId },
+		expect(await collect(search.search("important"))).toMatchObject([{ sessionId: "session", entryId }]);
+	});
+
+	it("honors entry type filters and abort signals in scanning search", async () => {
+		const session = createMemorySession({ id: "session", createdAt: 1, cwd: "/repo" });
+		const messageEntryId = await session.appendMessage(message("auth message"));
+		await session.appendCustomEntry("note", { text: "auth custom" });
+		const search = createScanningSessionSearch(createSource([session]));
+
+		expect(await collect(search.search("auth", { entryTypes: ["message"] }))).toMatchObject([
+			{ sessionId: "session", entryId: messageEntryId },
 		]);
+
+		const controller = new AbortController();
+		controller.abort();
+		await expect(collect(search.search("auth", { signal: controller.signal }))).rejects.toMatchObject({
+			name: "AbortError",
+		});
 	});
 
 	it("feeds memory projections into an arbitrary index without a repository search method", async () => {
@@ -193,9 +209,7 @@ describe("session search", () => {
 
 		await feedDocumentSnapshot(createSource([session]), index);
 
-		await expect(index.search({ text: "auth", cwd: "/repo" })).resolves.toMatchObject([
-			{ metadata: { id: "session", cwd: "/repo" }, entryId: first },
-		]);
+		expect(await collect(index.search("auth"))).toMatchObject([{ sessionId: "session", entryId: first }]);
 		expect(index.appliedBatches.length).toBeGreaterThan(1);
 	});
 
@@ -227,14 +241,24 @@ describe("session search", () => {
 		const otherEntryId = await other.appendMessage(message("jsonl backed auth entry in another cwd"));
 		const search = createJsonlScanningSessionSearch(options);
 
-		await expect(search.search({ text: "auth", cwd })).resolves.toMatchObject([
-			{ metadata: { id: "jsonl", cwd }, entryId },
-		]);
-		await expect(search.search({ text: "disk", cwd })).resolves.toMatchObject([
-			{ metadata: { id: "jsonl", cwd }, entryId },
-		]);
-		await expect(search.search({ text: "auth", cwd: otherCwd })).resolves.toMatchObject([
-			{ metadata: { id: "other", cwd: otherCwd }, entryId: otherEntryId },
+		const authHits = await collect(search.search("auth"));
+		expect(authHits).toHaveLength(2);
+		expect(authHits).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					sessionId: "jsonl",
+					metadata: expect.objectContaining({ id: "jsonl", cwd }),
+					entryId,
+				}),
+				expect.objectContaining({
+					sessionId: "other",
+					metadata: expect.objectContaining({ id: "other", cwd: otherCwd }),
+					entryId: otherEntryId,
+				}),
+			]),
+		);
+		expect(await collect(search.search("disk"))).toMatchObject([
+			{ sessionId: "jsonl", metadata: { id: "jsonl", cwd }, entryId },
 		]);
 	});
 

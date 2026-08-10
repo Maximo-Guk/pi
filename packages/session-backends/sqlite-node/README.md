@@ -12,7 +12,8 @@ const metadata = await session.getMetadata();
 const entryId = await session.appendMessage(message);
 await search.apply([{ type: "index_entry", sessionId: metadata.id, entryId }]);
 // Or rebuild/catch up everything: await search.apply([{ type: "rebuild" }]);
-const hits = await search.search({ text: "needle" });
+const hits = [];
+for await (const hit of search.search("needle")) hits.push(hit);
 ```
 
 The repository lazily owns one shared database connection. Search is an independent

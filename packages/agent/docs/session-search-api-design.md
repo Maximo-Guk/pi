@@ -48,7 +48,7 @@ export interface SessionSearchOptions {
 ```
 
 - `entryTypes` is a generic filter based on the canonical `Entry["type"]` field. It allows callers to limit results to message entries, compaction entries, etc., without leaking storage‑specific concepts.
-- `limit` is advisory; a backend may return fewer results if it cannot satisfy the request.
+- `limit` is a maximum result count. A backend may return fewer results, but must not return more.
 - `signal` enables safe cancellation of in‑flight searches (e.g. when the user changes the search term).
 
 ### Search Interface
@@ -58,7 +58,7 @@ export interface SessionSearch<T extends SessionSearchHit = SessionSearchHit> {
   /**
    * Search over committed session entries.
    *
-   * @param text    – query string (trimmed, case‑insensitive by default)
+   * @param text    – query string
    * @param options – optional paging, cancellation, and entry‑type filter
    * @returns an async iterable of hits in the order the backend chooses
    */
@@ -72,31 +72,27 @@ export interface SessionSearch<T extends SessionSearchHit = SessionSearchHit> {
 - The method returns an `AsyncIterable` (i.e. an object with a `[Symbol.asyncIterator]` method). This enables `for await (const hit of search.search(...))` loops.
 - The async iterable hides pagination, buffering, and any backend‑specific cursor state. Consumers simply iterate until the iterator is exhausted or they break out.
 - The order of hits is not guaranteed to be deterministic across backends; it is whatever the backend deems most relevant (e.g. BM25 score for FTS, or source order for a linear scanner). If a backend wishes to expose a score, it should do so by extending the hit type.
+- Query normalization and matching semantics are backend-specific. The built-in scanner trims and lowercases query text for case-insensitive substring matching, but the universal interface does not require every backend to use those semantics.
 
 ## Usage Examples
 
 ### Basic Scan
 
 ```ts
-import { createScanningSessionSearch } from "@earendil-works/pi-agent-core";
+import { createMemoryScanningSessionSearch } from "@earendil-works/pi-agent-core";
 import type { Session } from "@earendil-works/pi-agent-core/harness/session/types.ts";
 
-// Imagine we have a Map of already‑owned Session objects (e.g. from tests)
-const sessionsMap = new Map<string, Session>([/* ... */]);
-// Simple async iterable over the session values
-const source = {
-  async *[Symbol.asyncIterator]() {
-    for (const session of sessionsMap.values()) {
-      yield session;
-    }
-  },
-};
-const search = createScanningSessionSearch(source);
+// Imagine we have already-owned Session objects (e.g. from tests).
+const sessions: Session[] = [/* ... */];
+const sessionsById = new Map<string, Session>();
+for (const session of sessions) sessionsById.set((await session.getMetadata()).id, session);
+
+const search = createMemoryScanningSessionSearch(sessions);
 
 for await (const hit of search.search("authentication", { limit: 10 })) {
-  const session = sessionsMap.get(hit.sessionId)!;
+  const session = sessionsById.get(hit.sessionId)!;
   const entry = await session.getEntry(hit.entryId);
-  console.log(`Found in ${session.id}: ${entry.id}`);
+  console.log(`Found in ${hit.sessionId}: ${entry?.id}`);
 }
 ```
 
@@ -239,7 +235,7 @@ Everything else is strictly an implementation detail:
 
 - **Error propagation** – If reading a session’s metadata, entry list, or an individual entry throws, the error must be propagated to the consumer of the `AsyncIterable`. The iterator’s `next()` promise should reject with the error; the search operation stops immediately.
 
-- **Duplicate session IDs** – The backend must track seen `sessionId` values while iterating over the source. Encountering a duplicate `sessionId` must cause an immediate error (e.g., `new Error('Duplicate sessionId: ${sessionId})`) that is propagated as above.
+- **Duplicate session IDs in scanning sources** – A scanning backend that iterates a session source must track seen `sessionId` values while iterating that source. Encountering a duplicate `sessionId` must cause an immediate error (e.g., `new Error('Duplicate sessionId: ${sessionId})`) that is propagated as above. Indexed or remote backends that do not enumerate a session source may enforce uniqueness in their own storage/index layer instead.
 
 - **Snapshot consistency for indexing backends** – An indexing backend must obtain a read‑only, transactionally consistent snapshot of the session stream before indexing (e.g., using the harness’s committed‑only API). If a consistent snapshot cannot be obtained, the backend must abort and propagate an error indicating the inconsistency.
 
@@ -281,6 +277,7 @@ Implementations of the minimal API can be found in:
 - `packages/session-backends/sqlite-node/src/sqlite/search-backend.ts` – SQLite FTS implementation (which already satisfies `SessionSearch` via `IndexedSessionSearch`).
 
 No changes to `AgentHarness`, `Session`, `SessionStorage`, or `Effects` are required. Search remains an external service that consumes only committed session state.
+
 ## Default Implementations
 
 The shared `SessionSearchHit` stays minimal. Built-in implementations may return extended hit types when they can provide useful display data without making that data part of the universal contract.
@@ -303,6 +300,8 @@ export function createScanningSessionSearch(
 
 A scanner already reads each matching candidate, so returning `timestamp` and `snippet` avoids throwing away data the implementation already has. It does not define ranking or require a `score`.
 
+Memory scanning uses the same hit shape: `createMemoryScanningSessionSearch(...)` returns `SessionSearch<ScanningSessionSearchHit>`.
+
 ### JSONL scanning hits
 
 ```ts
@@ -317,3 +316,24 @@ export function createJsonlScanningSessionSearch(
 ```
 
 The JSONL adapter reads session metadata before scanning entries, so it can return that metadata as a JSONL-specific extension. Consumers typed against the base `SessionSearch` should rely only on `sessionId` and `entryId`; consumers typed against the JSONL implementation may use `metadata`, `timestamp`, and `snippet` to render results without immediately re-reading the session file.
+
+### SQLite FTS hits
+
+```ts
+export interface SqliteSessionSearchHit extends SessionSearchHit {
+  /** SQLite session metadata joined from the canonical session row. */
+  readonly metadata: SqliteSessionMetadata;
+
+  /** Entry commit time joined from the canonical entry row. */
+  readonly timestamp: number;
+
+  /** Backend-specific FTS score. Its meaning is SQLite-specific. */
+  readonly score: number;
+}
+
+export function createSqliteSessionSearch(
+  options: SqliteSessionSearchOptions,
+): IndexedSessionSearch<SqliteSessionSearchHit, SqliteSessionSearchFeedItem>;
+```
+
+The SQLite adapter exposes the async-iterable interface and iterates SQLite rows instead of first allocating the whole result set. Because the underlying Node SQLite API is synchronous, cancellation is still best-effort: it is checked before opening/querying and between yielded hits, but it cannot interrupt a single synchronous SQLite step while that step is executing.
