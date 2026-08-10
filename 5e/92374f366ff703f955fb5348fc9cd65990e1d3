@@ -1,0 +1,21 @@
+packages/ai/src/api/cloudflare-gateway-binding.ts
+  s_2214ad1d2f5139::t_c2c1f1eb6d833f 1-192
+packages/ai/test/cloudflare-gateway-binding.test.ts
+  s_2214ad1d2f5139::t_b0c21c33106c02 1-332
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "5e92374f366ff703f955fb5348fc9cd65990e1d3",
+  "prompts": {},
+  "sessions": {
+    "s_2214ad1d2f5139": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_2214ad1d2f5139",
+        "model": "unknown"
+      },
+      "human_author": "Maximo Guk <62088388+Maximo-Guk@users.noreply.github.com>"
+    }
+  }
+}
