@@ -52,8 +52,17 @@ export interface SqliteSessionSearchOptions {
 	databasePath: string;
 }
 
+function tableExists(db: SqliteDatabase, name: string): boolean {
+	return !!sql`SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = ${name} LIMIT 1`.get<{
+		found: number;
+	}>(db);
+}
+
 function ensureSearchSchema(db: SqliteDatabase): void {
-	sql`
+	const ftsExists = tableExists(db, "session_search_fts");
+	const entriesExist = tableExists(db, "entries");
+	db.transaction(() => {
+		sql`
 CREATE VIRTUAL TABLE IF NOT EXISTS session_search_fts USING fts5(
   payload,
   content = 'entries',
@@ -61,6 +70,8 @@ CREATE VIRTUAL TABLE IF NOT EXISTS session_search_fts USING fts5(
   tokenize = 'trigram remove_diacritics 1'
 );
 `.exec(db);
+		if (!ftsExists && entriesExist) rebuildSearchIndex(db);
+	});
 }
 
 export type SqliteSessionSearchFeedItem =
@@ -82,6 +93,16 @@ function indexSessionInSearchIndex(db: SqliteDatabase, sessionId: string): void 
 function indexEntryInSearchIndex(db: SqliteDatabase, sessionId: string, entryId: string): void {
 	sql`INSERT INTO session_search_fts(rowid, payload)
 		SELECT rowid, payload FROM entries WHERE session_id = ${sessionId} AND id = ${entryId}`.run(db);
+}
+
+function deleteSessionFromSearchIndex(db: SqliteDatabase, sessionId: string): void {
+	sql`INSERT INTO session_search_fts(session_search_fts, rowid, payload)
+		SELECT 'delete', rowid, payload FROM entries WHERE session_id = ${sessionId}`.run(db);
+}
+
+function deleteEntryFromSearchIndex(db: SqliteDatabase, sessionId: string, entryId: string): void {
+	sql`INSERT INTO session_search_fts(session_search_fts, rowid, payload)
+		SELECT 'delete', rowid, payload FROM entries WHERE session_id = ${sessionId} AND id = ${entryId}`.run(db);
 }
 
 export interface SqliteSessionSearchHit extends SessionSearchHit {
@@ -145,8 +166,10 @@ class SqliteSessionSearch implements IndexedSessionSearch<SqliteSessionSearchHit
 							indexEntryInSearchIndex(db, item.sessionId, item.entryId);
 							break;
 						case "delete_session":
+							deleteSessionFromSearchIndex(db, item.sessionId);
+							break;
 						case "delete_entry":
-							rebuildSearchIndex(db);
+							deleteEntryFromSearchIndex(db, item.sessionId, item.entryId);
 							break;
 					}
 				}

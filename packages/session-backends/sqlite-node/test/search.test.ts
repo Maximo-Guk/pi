@@ -94,6 +94,24 @@ describe("SQLite FTS5 session search", () => {
 		expect(await collect(search.search('missing "phrase"'))).toEqual([]);
 	});
 
+	it("rebuilds existing entries when FTS is first initialized", async () => {
+		const root = createTempDir();
+		const env = new NodeExecutionEnv({ cwd: root });
+		const databasePath = join(root, "sessions.sqlite");
+		await using fixture = createSqliteFixture({
+			env,
+			sqlite: createNodeSqliteFactory(),
+			databasePath,
+		});
+		const { repository, search } = fixture;
+		const session = await repository.create({ cwd: root, id: "session-1" });
+		const entryId = await session.appendMessage(createUserMessage("Find the auth defect"));
+
+		expect(await collect(search.search("auth"))).toEqual([
+			expect.objectContaining({ sessionId: "session-1", entryId }),
+		]);
+	});
+
 	it("honors entry type filters", async () => {
 		const root = createTempDir();
 		const env = new NodeExecutionEnv({ cwd: root });
@@ -153,6 +171,46 @@ describe("SQLite FTS5 session search", () => {
 
 		expect(await collect(search.search("auth"))).toEqual([]);
 		await expect(search.apply([{ type: "delete_session", sessionId: "session-1" }])).resolves.toBeUndefined();
+		expect(await collect(search.search("auth"))).toEqual([]);
+	});
+
+	it("removes existing entries from FTS for session delete feed items", async () => {
+		const root = createTempDir();
+		const env = new NodeExecutionEnv({ cwd: root });
+		const databasePath = join(root, "sessions.sqlite");
+		await using fixture = createSqliteFixture({
+			env,
+			sqlite: createNodeSqliteFactory(),
+			databasePath,
+		});
+		const { repository, search } = fixture;
+		const session = await repository.create({ cwd: root, id: "session-1" });
+		await session.appendMessage(createUserMessage("Find the auth defect"));
+		await search.apply([{ type: "index_session", sessionId: "session-1" }]);
+		expect(await collect(search.search("auth"))).toHaveLength(1);
+
+		await search.apply([{ type: "delete_session", sessionId: "session-1" }]);
+
+		expect(await collect(search.search("auth"))).toEqual([]);
+	});
+
+	it("removes existing entries from FTS for entry delete feed items", async () => {
+		const root = createTempDir();
+		const env = new NodeExecutionEnv({ cwd: root });
+		const databasePath = join(root, "sessions.sqlite");
+		await using fixture = createSqliteFixture({
+			env,
+			sqlite: createNodeSqliteFactory(),
+			databasePath,
+		});
+		const { repository, search } = fixture;
+		const session = await repository.create({ cwd: root, id: "session-1" });
+		const entryId = await session.appendMessage(createUserMessage("Find the auth defect"));
+		await search.apply([{ type: "index_entry", sessionId: "session-1", entryId }]);
+		expect(await collect(search.search("auth"))).toHaveLength(1);
+
+		await search.apply([{ type: "delete_entry", sessionId: "session-1", entryId }]);
+
 		expect(await collect(search.search("auth"))).toEqual([]);
 	});
 

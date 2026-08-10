@@ -19,4 +19,6 @@ for await (const hit of search.search("needle")) hits.push(hit);
 The repository lazily owns one shared database connection. Search is an independent
 service over the same canonical database: repositories do not expose `search()`,
 and FTS indexing is driven explicitly by the search adapter/application rather than
-canonical write triggers.
+canonical write triggers. The FTS table is created lazily; when it is first created,
+search performs a one-time rebuild from canonical entries. Later incremental updates
+should use `index_entry` or `index_session` feed items.
