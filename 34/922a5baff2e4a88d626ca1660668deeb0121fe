@@ -1,0 +1,29 @@
+packages/ai/src/api/anthropic-messages.ts
+  s_1dac6d56438157::t_30c34278d942ba 18,555,560-566,568-572
+packages/ai/src/api/cloudflare-gateway-binding.ts
+  s_1dac6d56438157::t_20e00a004842aa 21-26,29,133-145
+packages/ai/src/api/openai-completions.ts
+  s_1dac6d56438157::t_a7eeeb8d38669f 21,247-253
+packages/ai/src/api/openai-responses.ts
+  s_1dac6d56438157::t_7888ea229bce30 9,150-156
+packages/ai/src/types.ts
+  s_1dac6d56438157::t_89175cdd23a2f7 112-122
+packages/ai/test/cloudflare-gateway-binding.test.ts
+  s_1dac6d56438157::t_df324637204e23 2,9-10,260-288,358-360,367-440
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "34922a5baff2e4a88d626ca1660668deeb0121fe",
+  "prompts": {},
+  "sessions": {
+    "s_1dac6d56438157": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "21fbf310-06f3-4616-af34-aee2cfc35de6",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Maximo Guk <62088388+Maximo-Guk@users.noreply.github.com>"
+    }
+  }
+}
