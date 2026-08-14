@@ -1,0 +1,26 @@
+packages/ai/src/api/cloudflare-gateway-binding.ts
+  s_1dac6d56438157::t_8ae671843572d5 137-138
+  s_1dac6d56438157::t_5a86a53762098a 139
+  s_1dac6d56438157::t_20e00a004842aa 134
+  s_1dac6d56438157::t_c238df5db46e53 10-29,33,41-44,46-47,63-64,70,81,91,142-143,146-151,155-196
+  s_1dac6d56438157::t_94d94758d177fe 200-205
+packages/ai/test/cloudflare-gateway-binding.test.ts
+  s_1dac6d56438157::t_7eb13af56516b9 10,12-21,25,27-30,32-35,40,56,61-119,123,131,135,144,148,160-161,165,181,191,202-206,209-210,220,224,237-238,273,275,279,285,298,302,311,318-336,350,356-357,359,366-367,374,406-409
+  s_1dac6d56438157::t_df324637204e23 266,339-340
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "13a3cebb4c49fefe75db8862a1ab85261a393746",
+  "prompts": {},
+  "sessions": {
+    "s_1dac6d56438157": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "21fbf310-06f3-4616-af34-aee2cfc35de6",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Maximo Guk <62088388+Maximo-Guk@users.noreply.github.com>"
+    }
+  }
+}
