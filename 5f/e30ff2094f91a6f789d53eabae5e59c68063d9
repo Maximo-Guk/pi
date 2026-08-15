@@ -1,0 +1,19 @@
+packages/ai/README.md
+  s_9b25c8a777939e::t_7ff06a71628521 1190
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "5fe30ff2094f91a6f789d53eabae5e59c68063d9",
+  "prompts": {},
+  "sessions": {
+    "s_9b25c8a777939e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c99f8f34-98b3-4aa2-a640-3147c30b6651",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Maximo Guk <62088388+Maximo-Guk@users.noreply.github.com>"
+    }
+  }
+}
