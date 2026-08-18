@@ -1,0 +1,19 @@
+packages/ai/test/cloudflare-ai-binding.test.ts
+  s_9b25c8a777939e::t_f47ec23e6deb40 5-106
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "4f2b30aa74d20e24ff193816d0b316bc7265f7a4",
+  "prompts": {},
+  "sessions": {
+    "s_9b25c8a777939e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c99f8f34-98b3-4aa2-a640-3147c30b6651",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Maximo Guk <62088388+Maximo-Guk@users.noreply.github.com>"
+    }
+  }
+}
