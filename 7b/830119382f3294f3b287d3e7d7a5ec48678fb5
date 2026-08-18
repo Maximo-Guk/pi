@@ -1,0 +1,29 @@
+packages/ai/test/cloudflare-ai-binding.test.ts
+  s_9b25c8a777939e::t_f47ec23e6deb40 5-106,109
+packages/ai/src/api/cloudflare-ai-binding.ts
+  s_3f37f2ba7af0b4::t_bf8f375f226aa8 9-13,17-27,33-40,42-44,52-55,60-78,80-84,86-89
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "7b830119382f3294f3b287d3e7d7a5ec48678fb5",
+  "prompts": {},
+  "sessions": {
+    "s_3f37f2ba7af0b4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "70cd0c1c-0c7d-479a-865b-f1e83f902131",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Maximo Guk <62088388+Maximo-Guk@users.noreply.github.com>"
+    },
+    "s_9b25c8a777939e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c99f8f34-98b3-4aa2-a640-3147c30b6651",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Maximo Guk <62088388+Maximo-Guk@users.noreply.github.com>"
+    }
+  }
+}
